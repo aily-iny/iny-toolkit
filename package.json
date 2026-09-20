@@ -1,0 +1,156 @@
+{
+  "name": "iny-toolkit",
+  "displayName": "Iny Toolkit",
+  "description": "Iny's personal VS Code toolkit. Start with AI-assisted Git commits and grow it with focused workflows.",
+  "version": "0.2.0",
+  "publisher": "iny",
+  "engines": {
+    "vscode": "^1.92.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:iny.openDashboard",
+    "onCommand:iny.commit.generate",
+    "onCommand:iny.commit.generateAndCommit",
+    "onView:iny.home"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "iny.openDashboard",
+        "title": "Iny: Open Toolkit",
+        "icon": "$(account)"
+      },
+      {
+        "command": "iny.commit.generate",
+        "title": "Iny: Generate Commit Message",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "iny.commit.generateAndCommit",
+        "title": "Iny: Generate and Commit",
+        "icon": "$(check)"
+      },
+      {
+        "command": "iny.commit.setApiKey",
+        "title": "Iny: Set AI API Key",
+        "icon": "$(key)"
+      },
+      {
+        "command": "iny.commit.openSettings",
+        "title": "Iny: Configure Commit Assistant",
+        "icon": "$(gear)"
+      }
+    ],
+    "menus": {
+      "scm/title": [
+        {
+          "command": "iny.commit.generate",
+          "group": "navigation@10"
+        },
+        {
+          "command": "iny.commit.generateAndCommit",
+          "group": "navigation@11"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "iny.openDashboard"
+        },
+        {
+          "command": "iny.commit.generate"
+        },
+        {
+          "command": "iny.commit.generateAndCommit"
+        },
+        {
+          "command": "iny.commit.setApiKey"
+        },
+        {
+          "command": "iny.commit.openSettings"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "iny",
+          "title": "Iny",
+          "icon": "media/iny.svg"
+        }
+      ]
+    },
+    "views": {
+      "iny": [
+        {
+          "id": "iny.home",
+          "name": "Personal Toolkit",
+          "type": "webview"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Iny Toolkit",
+      "properties": {
+        "iny.profile.displayName": {
+          "type": "string",
+          "default": "iny",
+          "description": "Name shown in the Iny Toolkit dashboard."
+        },
+        "iny.commit.apiEndpoint": {
+          "type": "string",
+          "default": "https://api.openai.com/v1/chat/completions",
+          "description": "OpenAI-compatible Chat Completions endpoint."
+        },
+        "iny.commit.apiKey": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "API key for the AI provider. Prefer setting it with the **Iny: Set AI API Key** command."
+        },
+        "iny.commit.model": {
+          "type": "string",
+          "default": "gpt-4o-mini",
+          "description": "Model sent to the configured OpenAI-compatible endpoint. Any model ID accepted by your provider is supported."
+        },
+        "iny.commit.prompt": {
+          "type": "string",
+          "default": "You write precise Git commit messages. Return only one Conventional Commit subject line in the requested language. Use a concise imperative verb, include an optional scope only when obvious, keep it under 72 characters, and do not include markdown, quotes, explanation, or a body.",
+          "editPresentation": "multilineText",
+          "description": "System prompt used to generate commit messages."
+        },
+        "iny.commit.language": {
+          "type": "string",
+          "enum": [
+            "English",
+            "Chinese",
+            "Japanese",
+            "Auto"
+          ],
+          "default": "Auto",
+          "description": "Language used for the generated commit subject."
+        },
+        "iny.commit.maxDiffChars": {
+          "type": "number",
+          "default": 12000,
+          "minimum": 1000,
+          "maximum": 100000,
+          "description": "Maximum staged-diff characters sent to the model."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "package": "npm run compile && npx @vscode/vsce package --allow-missing-repository --skip-license"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.12",
+    "@types/vscode": "^1.92.0",
+    "typescript": "^5.5.4"
+  }
+}
