@@ -13,13 +13,14 @@ type ChatCompletion = {
 };
 
 export function activate(context: vscode.ExtensionContext): void {
+  const homeViewProvider = new InyHomeViewProvider(context);
   context.subscriptions.push(
     vscode.commands.registerCommand('iny.openDashboard', () => vscode.commands.executeCommand('workbench.view.extension.iny')),
     vscode.commands.registerCommand('iny.commit.generate', (target?: unknown) => generate(false, context, target)),
     vscode.commands.registerCommand('iny.commit.generateAndCommit', (target?: unknown) => generate(true, context, target)),
     vscode.commands.registerCommand('iny.commit.setApiKey', () => setApiKey(context)),
     vscode.commands.registerCommand('iny.commit.openSettings', () => openSettings(context)),
-    vscode.window.registerWebviewViewProvider('iny.home', new InyHomeViewProvider(context))
+    vscode.window.registerWebviewViewProvider('iny.home', homeViewProvider)
   );
 }
 
@@ -283,12 +284,22 @@ function settingsHtml(settings: Settings): string {
 
 /** The toolkit home is intentionally command-driven: new personal workflows can share this shell. */
 class InyHomeViewProvider implements vscode.WebviewViewProvider {
-  constructor(private readonly context: vscode.ExtensionContext) {}
+  private view: vscode.WebviewView | undefined;
+
+  constructor(private readonly context: vscode.ExtensionContext) {
+    context.subscriptions.push(
+      vscode.workspace.onDidChangeConfiguration(event => {
+        if (event.affectsConfiguration('iny.commit') || event.affectsConfiguration('iny.profile')) {
+          void this.refresh();
+        }
+      })
+    );
+  }
 
   async resolveWebviewView(view: vscode.WebviewView): Promise<void> {
+    this.view = view;
     view.webview.options = { enableScripts: true };
-    const displayName = vscode.workspace.getConfiguration('iny.profile').get<string>('displayName') || 'iny';
-    view.webview.html = dashboardHtml(displayName, await getSettings(this.context));
+    await this.refresh();
     view.webview.onDidReceiveMessage(async (message: unknown) => {
       if (!isRecord(message) || typeof message.command !== 'string') return;
       const commands: Record<string, string> = {
@@ -299,6 +310,12 @@ class InyHomeViewProvider implements vscode.WebviewViewProvider {
       const command = commands[message.command];
       if (command) await vscode.commands.executeCommand(command);
     }, undefined, this.context.subscriptions);
+  }
+
+  private async refresh(): Promise<void> {
+    if (!this.view) return;
+    const displayName = vscode.workspace.getConfiguration('iny.profile').get<string>('displayName') || 'iny';
+    this.view.webview.html = dashboardHtml(displayName, await getSettings(this.context));
   }
 }
 
