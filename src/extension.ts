@@ -118,7 +118,10 @@ async function findGitRepository(folder: vscode.Uri): Promise<RepositoryLocation
 
 async function getStagedDiff(cwd: string): Promise<string> {
   try {
-    const { stdout } = await execFile('git', ['diff', '--cached', '--no-ext-diff', '--binary'], {
+    // Commit subjects only need the textual patch. Asking Git for binary literals can
+    // make a normal image change exceed execFile's buffer before maxDiffChars has a
+    // chance to trim the prompt.
+    const { stdout } = await execFile('git', ['diff', '--cached', '--no-ext-diff', '--no-color'], {
       cwd,
       maxBuffer: 5 * 1024 * 1024
     });
@@ -147,31 +150,74 @@ async function generateMessage(diff: string, context: vscode.ExtensionContext): 
   const endpoint = config.get<string>('apiEndpoint') || 'https://api.openai.com/v1/chat/completions';
   const model = config.get<string>('model') || 'gpt-4o-mini';
   const prompt = config.get<string>('prompt') || DEFAULT_PROMPT;
-
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model,
-      temperature: 0.2,
-      messages: [
-        {
-          role: 'system',
-          content: prompt
-        },
-        {
-          role: 'user',
-          content: `Requested language: ${language}.\n\nGenerate a commit subject for these staged changes:\n\n${clippedDiff}`
-        }
-      ]
-    })
+  const requestBody = JSON.stringify({
+    model,
+    temperature: 0.2,
+    messages: [
+      { role: 'system', content: prompt },
+      {
+        role: 'user',
+        content: `Requested language: ${language}.\n\nGenerate a commit subject for these staged changes:\n\n${clippedDiff}`
+      }
+    ]
   });
+
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: requestBody
+    });
+  } catch (error) {
+    try {
+      response = await postJsonWithCurl(endpoint, apiKey, requestBody);
+    } catch (fallbackError) {
+      const reason = error instanceof Error && error.cause instanceof Error ? ` (${error.cause.message})` : '';
+      const fallbackReason = fallbackError instanceof Error ? `; curl fallback: ${fallbackError.message}` : '';
+      const host = vscode.env.remoteName ? 'the SSH host' : 'this machine';
+      throw new Error(`could not reach the AI endpoint ${endpoint} from ${host}${reason}${fallbackReason}. Configure an endpoint reachable from the extension host.`);
+    }
+  }
 
   const body = await response.json() as ChatCompletion;
   if (!response.ok) throw new Error(body.error?.message || `AI request failed (${response.status}).`);
   const content = body.choices?.[0]?.message?.content?.trim();
   if (!content) throw new Error('the AI provider returned no commit message.');
   return content.split('\n')[0].replace(/^['"`]|['"`]$/g, '').trim();
+}
+
+async function postJsonWithCurl(endpoint: string, apiKey: string, body: string): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const child = childProcess.spawn('curl', ['--config', '-', '--data-binary', '@/dev/fd/3'], {
+      stdio: ['pipe', 'pipe', 'pipe', 'pipe']
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => { stdout += chunk; });
+    child.stderr.on('data', (chunk: string) => { stderr += chunk; });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code !== 0) return reject(new Error(stderr.trim() || `curl exited with code ${code}`));
+      const match = /\n(\d{3})$/.exec(stdout);
+      if (!match) return reject(new Error('curl returned no HTTP status.'));
+      resolve(new Response(stdout.slice(0, -match[0].length), { status: Number(match[1]) }));
+    });
+
+    const quote = (value: string) => value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+    child.stdin.end([
+      'silent',
+      'show-error',
+      'request = "POST"',
+      'header = "Content-Type: application/json"',
+      `header = "Authorization: Bearer ${quote(apiKey)}"`,
+      'write-out = "\\n%{http_code}"',
+      `url = "${quote(endpoint)}"`
+    ].join('\n'));
+    (child.stdio[3] as NodeJS.WritableStream).end(body);
+  });
 }
 
 async function setApiKey(context: vscode.ExtensionContext): Promise<void> {

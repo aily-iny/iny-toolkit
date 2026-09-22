@@ -2,7 +2,7 @@
   "name": "iny-toolkit",
   "displayName": "Iny Toolkit",
   "description": "Iny's personal VS Code toolkit. Start with AI-assisted Git commits and grow it with focused workflows.",
-  "version": "0.2.0",
+  "version": "0.2.3",
   "publisher": "iny",
   "engines": {
     "vscode": "^1.92.0"
@@ -18,6 +18,11 @@
     "onView:iny.home"
   ],
   "main": "./dist/extension.js",
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "package": "npm run compile && npx @vscode/vsce package --allow-missing-repository --skip-license"
+  },
   "contributes": {
     "commands": [
       {
@@ -142,11 +147,6 @@
         }
       }
     }
-  },
-  "scripts": {
-    "compile": "tsc -p .",
-    "watch": "tsc -watch -p .",
-    "package": "npm run compile && npx @vscode/vsce package --allow-missing-repository --skip-license"
   },
   "devDependencies": {
     "@types/node": "^20.14.12",
